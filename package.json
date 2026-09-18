@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:electron": "electron-builder --win",
+    "build:electron": "electron-builder --win --publish never",
     "preview": "vite preview",
     "test": "vitest run",
     "build:injected": "esbuild src-injected/index.ts --bundle --minify --format=iife --outfile=src-tauri/assets/inject.js"
