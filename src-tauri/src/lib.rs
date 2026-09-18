@@ -1,7 +1,7 @@
 pub mod layout;
 
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 pub const INJECT_SCRIPT: &str = include_str!("../assets/inject.js");
 
@@ -44,6 +44,7 @@ impl Default for AppLayoutState {
 
 pub mod commands {
     use super::*;
+    use tauri::Manager;
 
     #[tauri::command]
     pub fn get_layout_state(state: State<'_, AppLayoutState>) -> (f64, bool) {
@@ -95,17 +96,17 @@ pub mod commands {
 
     #[tauri::command]
     pub fn weread_navigate(app: AppHandle, url: String) -> Result<(), String> {
-        if let Some(weread_webview) = app.get_webview("weread") {
+        if let Some(weread_window) = app.get_webview_window("weread") {
             let parsed_url = url.parse::<tauri::Url>().map_err(|e| e.to_string())?;
-            weread_webview.navigate(parsed_url).map_err(|e| e.to_string())?;
+            weread_window.navigate(parsed_url).map_err(|e| e.to_string())?;
         }
         Ok(())
     }
 
     #[tauri::command]
     pub fn weread_reload(app: AppHandle) -> Result<(), String> {
-        if let Some(weread_webview) = app.get_webview("weread") {
-            weread_webview.reload().map_err(|e| e.to_string())?;
+        if let Some(weread_window) = app.get_webview_window("weread") {
+            weread_window.eval("location.reload()").map_err(|e| e.to_string())?;
         }
         Ok(())
     }
