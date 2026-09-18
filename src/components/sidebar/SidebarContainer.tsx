@@ -1,10 +1,26 @@
 import React from 'react';
-import { BookMarked, MessageSquareText, Compass, Settings } from 'lucide-react';
+import { BookMarked, MessageSquareText, Compass, Settings, Library } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { UnauthenticatedView } from '../auth/UnauthenticatedView';
+import { ShelfDashboard } from '../shelf/ShelfDashboard';
 import type { SidebarTab } from '../../types';
 
 export const SidebarContainer: React.FC = () => {
-  const { activeTab, setActiveTab, readerContext } = useAppStore();
+  const { 
+    appPhase, 
+    activeTab, 
+    setActiveTab, 
+    readerContext, 
+    handleRouteChange 
+  } = useAppStore();
+
+  if (appPhase === 'UNAUTHENTICATED') {
+    return <UnauthenticatedView />;
+  }
+
+  if (appPhase === 'AUTHENTICATED_SHELF') {
+    return <ShelfDashboard />;
+  }
 
   const tabs: { id: SidebarTab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: '章节导读', icon: <Compass className="w-4 h-4 mr-1.5" /> },
@@ -14,16 +30,30 @@ export const SidebarContainer: React.FC = () => {
 
   return (
     <aside className="h-full w-full flex flex-col bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 overflow-hidden">
-      {/* 顶部 Tab 栏 */}
-      <div className="flex items-center border-b border-slate-200 dark:border-slate-800 px-2 bg-slate-50/50 dark:bg-slate-900/50">
-        <div className="flex space-x-1 py-1.5 flex-1">
+      {/* 顶部 Tab 栏与返回书架按钮 */}
+      <div className="flex items-center border-b border-slate-200 dark:border-slate-800 px-2 bg-slate-50/50 dark:bg-slate-900/50 justify-between">
+        <button
+          onClick={() => handleRouteChange({
+            url: 'https://weread.qq.com/web/shelf',
+            isReaderPage: false,
+            bookId: null,
+            timestamp: Date.now(),
+          })}
+          className="flex items-center text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mr-1"
+          title="返回全局书架"
+        >
+          <Library className="w-3.5 h-3.5 mr-1 text-slate-400" />
+          <span>书架</span>
+        </button>
+
+        <div className="flex space-x-1 py-1.5 flex-1 justify-center">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
                   isActive
                     ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm'
                     : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
@@ -37,10 +67,10 @@ export const SidebarContainer: React.FC = () => {
         </div>
 
         <button
-          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ml-1"
           title="设置"
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -52,8 +82,8 @@ export const SidebarContainer: React.FC = () => {
               <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200">
                 Overview Hub (章节脉络)
               </h3>
-              <span className="text-xs text-slate-400">
-                {readerContext.bookTitle ? readerContext.bookTitle : '暂未进入书籍'}
+              <span className="text-xs text-slate-400 truncate max-w-[150px]">
+                {readerContext.bookTitle || '未命名书籍'}
               </span>
             </div>
 
