@@ -8,40 +8,41 @@ import {
   ExternalLink, 
   Sparkles, 
   BookOpen, 
-  Maximize2,
+  Maximize2, 
   Minimize2,
-  ChevronDown
+  ChevronDown,
+  ShieldCheck
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 const QUICK_BOOKS = [
   {
     title: '微信读书首页',
-    path: '/weread-proxy/',
+    path: 'https://weread.qq.com/',
     bookId: null,
     chapter: '',
   },
   {
     title: '我的书架 (需扫码登录)',
-    path: '/weread-proxy/web/shelf',
+    path: 'https://weread.qq.com/web/shelf',
     bookId: null,
     chapter: '',
   },
   {
     title: '《认知觉醒》（周岭）',
-    path: '/weread-proxy/web/reader/6a732ce07201202c6a7b30a',
+    path: 'https://weread.qq.com/web/reader/6a732ce07201202c6a7b30a',
     bookId: '6a732ce07201202c6a7b30a',
     chapter: '上篇 内驱力：大脑的秘密与认知的飞跃',
   },
   {
     title: '《思考，快与慢》（卡尼曼）',
-    path: '/weread-proxy/web/reader/af83263058c217af81f8979',
+    path: 'https://weread.qq.com/web/reader/af83263058c217af81f8979',
     bookId: 'af83263058c217af81f8979',
     chapter: '第1章 一张愤怒的脸与一道乘法题',
   },
   {
     title: '《纳瓦尔宝典》（埃里克）',
-    path: '/weread-proxy/web/reader/237326b071d072b2237bbad',
+    path: 'https://weread.qq.com/web/reader/237326b071d072b2237bbad',
     bookId: '237326b071d072b2237bbad',
     chapter: '第一部分 财富：如何不靠运气致富',
   },
@@ -57,16 +58,71 @@ export const ReaderViewport: React.FC = () => {
     isSidebarVisible
   } = useAppStore();
 
-  const [currentPath, setCurrentPath] = useState('/weread-proxy/web/reader/af83263058c217af81f8979');
-  const [inputUrl, setInputUrl] = useState('/weread-proxy/web/reader/af83263058c217af81f8979');
+  const [currentUrl, setCurrentUrl] = useState('https://weread.qq.com/web/reader/af83263058c217af81f8979');
+  const [inputUrl, setInputUrl] = useState('https://weread.qq.com/web/reader/af83263058c217af81f8979');
   const [isLoading, setIsLoading] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [capturedSelection, setCapturedSelection] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // 检测是否处于 Tauri 原生桌面运行时环境
+  const isTauri = typeof window !== 'undefined' && !!(window as unknown as { __TAURI__?: unknown }).__TAURI__;
+
+  // 监听 Tauri 跨视窗事件（Injected Script -> Host Sidebar）
+  useEffect(() => {
+    const tauri = (window as unknown as { __TAURI__?: { event?: { listen: Function } } }).__TAURI__;
+    if (!tauri?.event?.listen) return;
+
+    let isSubscribed = true;
+    const cleanups: Array<() => void> = [];
+
+    // 1. 监听路由变更
+    tauri.event.listen('weread:route-change', (event: { payload: { url: string; isReaderPage: boolean; bookId: string | null; chapterTitle?: string } }) => {
+      if (!isSubscribed) return;
+      const { url, isReaderPage, bookId, chapterTitle } = event.payload;
+      setCurrentUrl(url);
+      setInputUrl(url);
+      handleRouteChange({
+        url,
+        isReaderPage,
+        bookId,
+        chapterTitle: chapterTitle || readerContext.chapterTitle || '当前章节',
+        timestamp: Date.now(),
+      });
+    }).then((unlisten: () => void) => {
+      if (isSubscribed) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    // 2. 监听划词提问
+    tauri.event.listen('weread:selection-query', (event: { payload: { bookId: string; chapterTitle: string; selectedText: string; contextParagraph: string; timestamp: number } }) => {
+      if (!isSubscribed) return;
+      setActiveSelection(event.payload);
+    }).then((unlisten: () => void) => {
+      if (isSubscribed) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    // 3. 监听正文滚动切换章节
+    tauri.event.listen('weread:reader-scroll', (event: { payload: { bookId: string; currentChapterTitle: string } }) => {
+      if (!isSubscribed) return;
+      if (event.payload.currentChapterTitle) {
+        setReaderContext({ chapterTitle: event.payload.currentChapterTitle });
+      }
+    }).then((unlisten: () => void) => {
+      if (isSubscribed) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    return () => {
+      isSubscribed = false;
+      cleanups.forEach((fn) => fn());
+    };
+  }, [handleRouteChange, readerContext.chapterTitle, setActiveSelection, setReaderContext]);
+
   // 导航至指定路径
   const navigateTo = useCallback((targetUrl: string, bookTitle?: string) => {
-    setCurrentPath(targetUrl);
+    setCurrentUrl(targetUrl);
     setInputUrl(targetUrl);
     setIsLoading(true);
 
@@ -85,48 +141,25 @@ export const ReaderViewport: React.FC = () => {
     if (bookTitle) {
       setReaderContext({ bookTitle });
     }
+
+    // 若在 Tauri 原生桌面环境下，通知 Rust 端调度 WeRead Webview 进行原生直连导航
+    const tauri = (window as unknown as { __TAURI__?: { core?: { invoke: Function } } }).__TAURI__;
+    if (tauri?.core?.invoke) {
+      tauri.core.invoke('weread_navigate', { url: targetUrl }).catch(() => {});
+    }
+
+    setTimeout(() => setIsLoading(false), 600);
   }, [handleRouteChange, readerContext.chapterTitle, setReaderContext]);
 
   // 当外部（如 Overview Hub 导读或书架）触发路由变更时同步当前 URL
   useEffect(() => {
-    if (readerContext.bookId && !currentPath.includes(readerContext.bookId)) {
-      const newPath = `/weread-proxy/web/reader/${readerContext.bookId}`;
-      setCurrentPath(newPath);
+    if (readerContext.bookId && !currentUrl.includes(readerContext.bookId)) {
+      const newPath = `https://weread.qq.com/web/reader/${readerContext.bookId}`;
+      setCurrentUrl(newPath);
       setInputUrl(newPath);
+      navigateTo(newPath);
     }
-  }, [readerContext.bookId, currentPath]);
-
-  // 监听 IFrame 内部的选区行为 (由于反向代理，处于同源状态)
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-
-    const handleIframeLoad = () => {
-      setIsLoading(false);
-      try {
-        const doc = iframe.contentDocument;
-        if (!doc) return;
-
-        // 注入鼠标划选监听
-        doc.addEventListener('mouseup', () => {
-          const win = iframe.contentWindow;
-          const sel = win?.getSelection();
-          const text = sel ? sel.toString().trim() : '';
-
-          if (text && text.length > 2) {
-            setCapturedSelection(text);
-          }
-        });
-      } catch (err) {
-        console.warn('[Reader] Unable to attach iframe document listener:', err);
-      }
-    };
-
-    iframe.addEventListener('load', handleIframeLoad);
-    return () => {
-      iframe.removeEventListener('load', handleIframeLoad);
-    };
-  }, []);
+  }, [readerContext.bookId, currentUrl, navigateTo]);
 
   // 确认将选区发送到 AI 伴读
   const handleTriggerAiFromSelection = (textToSend?: string) => {
@@ -145,11 +178,20 @@ export const ReaderViewport: React.FC = () => {
   };
 
   const handleRefresh = () => {
-    if (iframeRef.current) {
-      setIsLoading(true);
-      iframeRef.current.src = currentPath;
+    setIsLoading(true);
+    const tauri = (window as unknown as { __TAURI__?: { core?: { invoke: Function } } }).__TAURI__;
+    if (tauri?.core?.invoke) {
+      tauri.core.invoke('weread_reload').catch(() => {});
+    } else if (iframeRef.current) {
+      iframeRef.current.src = iframeRef.current.src;
     }
+    setTimeout(() => setIsLoading(false), 500);
   };
+
+  // 在纯 Web 开发预览模式下使用的代理路径；在桌面端模式下直连官方
+  const effectiveEmbedSrc = isTauri 
+    ? currentUrl 
+    : currentUrl.replace(/^https?:\/\/weread\.qq\.com/, '/weread-proxy');
 
   return (
     <div className="h-full w-full flex flex-col bg-slate-900 overflow-hidden relative select-none">
@@ -199,6 +241,12 @@ export const ReaderViewport: React.FC = () => {
             className="flex-1 bg-transparent text-slate-200 text-[11px] font-mono focus:outline-none truncate"
           />
 
+          {/* 官方直连安全标识 */}
+          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40" title="官方直连模式已启用，无插件告警">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            <span className="hidden sm:inline">官方直连</span>
+          </div>
+
           {/* 快捷书单下拉切换 */}
           <div className="relative">
             <button
@@ -234,14 +282,14 @@ export const ReaderViewport: React.FC = () => {
         {/* 快捷按钮组 */}
         <div className="flex items-center space-x-1">
           <button
-            onClick={() => navigateTo('/weread-proxy/')}
+            onClick={() => navigateTo('https://weread.qq.com/')}
             className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-slate-200"
             title="微信读书首页"
           >
             <Home className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => navigateTo('/weread-proxy/web/shelf')}
+            onClick={() => navigateTo('https://weread.qq.com/web/shelf')}
             className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-slate-200"
             title="我的书架"
           >
@@ -266,7 +314,7 @@ export const ReaderViewport: React.FC = () => {
         </div>
       </div>
 
-      {/* 选区浮动提示横条 (当检测到鼠标选词时展现) */}
+      {/* 选区浮动提示横条 (当检测到鼠标选词或接收到 selection-query 时展现) */}
       {capturedSelection && (
         <div className="bg-brand-600 text-white px-3 py-1.5 text-xs flex items-center justify-between shrink-0 shadow-md animate-in slide-in-from-top-2">
           <div className="flex items-center space-x-2 truncate mr-2">
@@ -294,11 +342,11 @@ export const ReaderViewport: React.FC = () => {
         </div>
       )}
 
-      {/* 核心真实 IFrame 视窗 */}
+      {/* 视窗容器：桌面端由 Tauri/Electron 原生 Webview 承载；开发环境下由沙箱视窗承载 */}
       <div className="flex-1 w-full h-full relative bg-white">
         <iframe
           ref={iframeRef}
-          src={currentPath}
+          src={effectiveEmbedSrc}
           title="Tencent WeRead Native Web Reader"
           className="w-full h-full border-0"
           allow="clipboard-read; clipboard-write"

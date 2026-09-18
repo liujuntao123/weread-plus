@@ -1,16 +1,31 @@
 /**
  * weread-plus Injected Script
- * 编译产物为 IIFE 格式，注入到 WeRead Web 主站中
+ * 编译产物为 IIFE 格式，通过 Tauri initialization_script 注入到 WeRead Web 原生视窗中
+ * 参考 weixin-reader-desktop 架构规范：原生注入、安全隔离、无跨域告警
  */
 
 (() => {
-  console.log('[weread-plus] Injected script initialized.');
+  // 1. 子框架与跨域安全守卫：跨域 OAuth iframe / 内部 frame 必须跳过，防止风控异常
+  if (window.self !== window.top) {
+    try {
+      void (window.top as Window).location.href;
+    } catch {
+      return;
+    }
+  }
 
-  // 1. 挂载或检测 Tauri IPC
+  // 避免重复注入
+  if ((window as any).__WEREAD_PLUS_INJECTED__) return;
+  (window as any).__WEREAD_PLUS_INJECTED__ = true;
+
+  console.log('[weread-plus] Injected script safely initialized.');
+
+  // 2. 挂载或检测 Tauri / Electron IPC
   const tauri = (window as unknown as { __TAURI__?: { event?: { emit: Function; listen: Function } } }).__TAURI__;
 
   let currentUrl = location.href;
   let currentBookId: string | null = null;
+  let lastReportedChapter = '';
 
   function parseBookId(url: string): string | null {
     const match = url.match(/\/web\/reader\/([a-zA-Z0-9_]+)/);
@@ -21,41 +36,62 @@
     const newUrl = location.href;
     const bookId = parseBookId(newUrl);
     const isReader = !!bookId;
+    const chapterTitleEl = document.querySelector('.readerTopBar_title_chapter');
+    const chapterTitle = chapterTitleEl?.textContent?.trim() || '';
 
-    if (newUrl !== currentUrl || bookId !== currentBookId) {
+    if (newUrl !== currentUrl || bookId !== currentBookId || (isReader && chapterTitle && chapterTitle !== lastReportedChapter)) {
       currentUrl = newUrl;
       currentBookId = bookId;
-      console.log('[weread-plus] Route changed:', { newUrl, bookId, isReader });
+      if (chapterTitle) lastReportedChapter = chapterTitle;
+
+      console.log('[weread-plus] Route changed:', { newUrl, bookId, isReader, chapterTitle });
 
       if (tauri?.event?.emit) {
         tauri.event.emit('weread:route-change', {
           url: newUrl,
           bookId,
           isReaderPage: isReader,
+          chapterTitle,
           timestamp: Date.now(),
         });
       }
     }
   }
 
-  // 2. 劫持 History API
+  // 3. 规范 Hook History API（保持原生返回及异常隔离）
   const originalPushState = history.pushState;
   history.pushState = function (this: History, ...args: Parameters<History['pushState']>) {
-    originalPushState.apply(this, args);
+    const res = originalPushState.apply(this, args);
     setTimeout(notifyRouteChange, 50);
+    return res;
   };
 
   const originalReplaceState = history.replaceState;
   history.replaceState = function (this: History, ...args: Parameters<History['replaceState']>) {
-    originalReplaceState.apply(this, args);
+    const res = originalReplaceState.apply(this, args);
     setTimeout(notifyRouteChange, 50);
+    return res;
   };
 
   window.addEventListener('popstate', () => {
     setTimeout(notifyRouteChange, 50);
   });
 
-  // 3. 浮动工具栏注入 AI 提问按钮
+  // 4. 监听 document.title 变化（微信读书双栏/横排模式翻页不改 URL，但更新 title 与顶栏）
+  let lastTitle = document.title;
+  const titleObserver = new MutationObserver(() => {
+    if (document.title !== lastTitle) {
+      lastTitle = document.title;
+      setTimeout(notifyRouteChange, 100);
+    }
+  });
+
+  const titleEl = document.querySelector('title');
+  if (titleEl) {
+    titleObserver.observe(titleEl, { childList: true });
+  }
+
+  // 5. 浮动工具栏注入 AI 提问按钮
   const AI_BTN_ID = 'weread-plus-ai-trigger-btn';
 
   function injectAiButton(toolbar: HTMLElement) {
@@ -107,7 +143,7 @@
     toolbar.appendChild(btn);
   }
 
-  // 4. 监听 DOM 树挂载工具栏
+  // 6. 监听 DOM 树挂载工具栏
   const observer = new MutationObserver(() => {
     const toolbar = document.querySelector('.reader_toolbar_container') as HTMLElement | null;
     if (toolbar && toolbar.style.display !== 'none') {
@@ -124,7 +160,7 @@
     });
   }
 
-  // 5. 监听侧边栏派发的章节跳转指令
+  // 7. 监听侧边栏派发的章节跳转指令
   if (tauri?.event?.listen) {
     tauri.event.listen('sidebar:navigate-chapter', (event: { payload: { chapterTitle: string; chapterUid?: number } }) => {
       const { chapterTitle } = event.payload;
@@ -141,9 +177,8 @@
     });
   }
 
-  // 6. 监听阅读器滚动并防抖通知当前章节 (200ms 防抖)
+  // 8. 监听阅读器滚动并防抖通知当前章节 (200ms 防抖)
   let scrollTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastReportedChapter = '';
 
   function handleReaderScroll() {
     if (scrollTimer) clearTimeout(scrollTimer);

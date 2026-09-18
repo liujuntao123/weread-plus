@@ -4,6 +4,7 @@ dist/
 dist-ssr/
 release/
 windows-release/
+tauri-release/
 *.local
 
 # Rust / Cargo
