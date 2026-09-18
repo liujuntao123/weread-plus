@@ -10,10 +10,10 @@ name = "weread_plus_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.1", default-features = false }
+tauri-build = { version = "2" }
 
 [dependencies]
-tauri = { version = "2.1", default-features = false }
+tauri = { version = "2" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
