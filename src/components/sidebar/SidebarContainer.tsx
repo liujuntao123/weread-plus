@@ -5,6 +5,7 @@ import { UnauthenticatedView } from '../auth/UnauthenticatedView';
 import { ShelfDashboard } from '../shelf/ShelfDashboard';
 import { NotesStream } from '../notes/NotesStream';
 import { OverviewHub } from '../overview/OverviewHub';
+import { CopilotChat } from '../copilot/CopilotChat';
 import type { SidebarTab } from '../../types';
 
 export const SidebarContainer: React.FC = () => {
@@ -86,13 +87,8 @@ export const SidebarContainer: React.FC = () => {
         )}
 
         {activeTab === 'copilot' && (
-          <div className="space-y-4">
-            <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200">
-              AI 智能伴读助手
-            </h3>
-            <p className="text-xs text-slate-400">
-              在正文划选文本点击“AI 提问”，或在此处直接提问全书相关问题。
-            </p>
+          <div className="h-full">
+            <CopilotChat />
           </div>
         )}
       </div>

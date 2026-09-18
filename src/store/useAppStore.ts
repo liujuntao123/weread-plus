@@ -107,6 +107,7 @@ export const useAppStore = create<AppState>((set) => ({
   setActiveSelection: (selection: SelectionContext | null) => {
     set((state) => ({
       activeSelection: selection,
+      activeTab: selection ? 'copilot' : state.activeTab,
       appPhase: selection ? 'SELECTION_FOCUSED' : (state.readerContext.isReaderPage ? 'READING_WORKSPACE' : 'AUTHENTICATED_SHELF'),
     }));
   },
