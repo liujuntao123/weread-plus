@@ -91,6 +91,24 @@ export interface OverviewDocument {
   rawMarkdown: string;
 }
 
+export interface AiProviderConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+  isDefault: boolean;
+}
+
+export interface CopilotContext {
+  bookTitle: string;
+  author?: string;
+  chapterTitle?: string;
+  chapterSummary?: string;
+  selectionQuote?: string;
+  selectionParagraph?: string;
+}
+
 export interface DualWebviewLayoutState {
   splitRatio: number;
   isSidebarVisible: boolean;
