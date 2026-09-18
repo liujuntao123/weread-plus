@@ -1,6 +1,6 @@
 [package]
 name = "weread-plus"
-version = "0.1.1"
+version = "0.1.2"
 description = "Desktop enhancement client for Tencent WeRead"
 authors = ["weread-plus authors"]
 edition = "2021"
