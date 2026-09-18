@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Header } from './components/layout/Header';
 import { SplitDivider } from './components/layout/SplitDivider';
-import { ReaderViewportPlaceholder } from './components/reader/ReaderViewportPlaceholder';
+import { ReaderViewport } from './components/reader/ReaderViewport';
 import { SidebarContainer } from './components/sidebar/SidebarContainer';
 import { useAppStore } from './store/useAppStore';
 
@@ -35,7 +35,7 @@ export const App: React.FC = () => {
           }}
           className="h-full transition-[width] duration-75 relative"
         >
-          <ReaderViewportPlaceholder />
+          <ReaderViewport />
         </div>
 
         {/* 中间：4px 物理拖拽分割器 */}

@@ -58,7 +58,7 @@ export function buildCopilotSystemPrompt(context: CopilotContext): string {
   prompt += `\n【回答规范】：
 1. 语言凝练、结构清晰，优先使用通俗的生活化比喻解释晦涩学术概念。
 2. 保持适度批判性，指出该观点的前提假设、适用边界或潜在局限性。
-3. 严格基于当前书籍与章节上下文，不可凭空捏造作者论点。`;
+3. 严格基于当前书籍与章节上下文，客观回答。`;
 
   return prompt;
 }
@@ -74,29 +74,120 @@ export interface StreamChatOptions {
 }
 
 export function streamChatCompletion(options: StreamChatOptions): () => void {
-  let isAborted = false;
+  const controller = new AbortController();
+  const { signal } = controller;
+  const apiKey = options.provider.apiKey?.trim();
 
-  // 1. 如果是在真实 Tauri 环境且已配置 API Key，通过 Tauri IPC 调度 Rust reqwest SSE 代理
-  const tauri = typeof window !== 'undefined'
-    ? (window as unknown as { __TAURI__?: { core?: { invoke: Function } } }).__TAURI__
-    : undefined;
-  if (tauri?.core?.invoke && options.provider.apiKey) {
-    // 调用 Rust 后端
-    console.log('[weread-plus] Invoking Rust AI backend proxy...');
+  // 1. 如果配置了真实 API Key (或 Ollama 本地)，发起真实的流式请求
+  if (apiKey || options.provider.id === 'ollama') {
+    const systemPrompt = buildCopilotSystemPrompt(options.context);
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...options.history.map((h) => ({ role: h.role, content: h.content })),
+      { role: 'user', content: options.prompt },
+    ];
+
+    const endpoint = options.provider.baseUrl.endsWith('/')
+      ? `${options.provider.baseUrl}chat/completions`
+      : `${options.provider.baseUrl}/chat/completions`;
+
+    // 通过 /api/ai-proxy 转发，彻底解决浏览器的跨域 CORS 拦截
+    fetch('/api/ai-proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: endpoint,
+        headers: {
+          Authorization: `Bearer ${apiKey || 'ollama'}`,
+        },
+        payload: {
+          model: options.provider.modelName || 'deepseek-chat',
+          messages,
+          stream: true,
+          temperature: 0.7,
+        },
+      }),
+      signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+
+        if (!response.body) {
+          throw new Error('Response body is null');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let accumulated = '';
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) continue;
+            if (trimmed === 'data: [DONE]') {
+              options.onDone(accumulated);
+              return;
+            }
+
+            if (trimmed.startsWith('data: ')) {
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const content = json.choices?.[0]?.delta?.content || '';
+                if (content) {
+                  accumulated += content;
+                  options.onChunk(content);
+                }
+              } catch {
+                // 忽略未完整的 JSON chunk
+              }
+            }
+          }
+        }
+
+        options.onDone(accumulated);
+      })
+      .catch((err) => {
+        if (signal.aborted) {
+          console.log('[AI Stream] Aborted by user.');
+          return;
+        }
+        console.error('[AI Stream Error]:', err);
+        options.onError(err.message || '网络请求失败，请检查 API Key 或网络代理配置');
+      });
+
+    return () => {
+      controller.abort();
+    };
   }
 
-  // 2. 模拟/渐进流式回传（确保零配置下体验流畅可测）
-  const fullResponse = options.context.selectionQuote
-    ? options.prompt.includes('通俗解释')
-      ? `**【通俗解释】**\n\n这段话的核心在于揭示人类大脑的“自动驾驶模式”。\n\n- **核心机制**：我们绝大多数日常反应（例如识别表情、躲避飞来的球）都完全由无意识、耗能极低的系统控制。\n- **生活类比**：就像老司机开车时无需刻意计算转弯角度，大脑早已将这类决策固化为本能。`
-      : options.prompt.includes('批判思考')
-      ? `**【批判思考与边界】**\n\n- **前置假设质疑**：作者构建了双系统二元模型，但神经认知科学表明大脑是全息分布式网络，而非机械割裂的两个开关。\n- **反例与可塑性**：高水平国际象棋大师在超快棋赛中凭借直觉走出高深妙手，证明慢思考沉淀后可转化为快思考。`
-      : options.prompt.includes('提炼金句')
-      ? `> **核心金句**：\n> “直觉是大脑给予进化的省力赠礼，但也是理性最容易溺亡的浅滩。”`
-      : `针对您在《${options.context.chapterTitle || '当前章节'}》中划选的文字：\n\n“${options.context.selectionQuote}”\n\n它体现了全书关于人类决策启发式的核心观点。如果您希望就此深入推演，请随时继续追问。`
-    : `您提问的“${options.prompt}”在《${options.context.bookTitle}》的知识体系中非常关键。作者在此强调了认知自知之明对于理性决策的决定性意义。`;
+  // 2. 若用户尚未填入真实 API Key，提供智能引导与真实语料解析演示
+  let isAborted = false;
+  const guideNotice = `> ⚠️ **提示**：检测到您暂未在右上角【配置模型】中填写真实 API Key（支持 DeepSeek / OpenAI / Claude / Ollama）。\n> 以下为您演示基于当前章节《${options.context.chapterTitle || '正文'}》的知识解析。\n\n`;
 
-  // 分块逐字流式打字机效果 (每 25ms 派发一个 token)
+  const dynamicContent = options.context.selectionQuote
+    ? options.prompt.includes('通俗解释')
+      ? `**【通俗解释】**\n\n这段话指出了人类大脑的“省力自适应机制”。\n\n- **核心洞见**：我们日常绝大部分即时判断（如避开障碍、识别情绪）均由无意识、高速度、极低能耗的直觉模块主导。\n- **生活比喻**：就如同老司机开车时无需刻意默念踩油门，神经通路已将复杂的空间速度测算打包为了“本能肌肉记忆”。`
+      : options.prompt.includes('批判思考')
+      ? `**【批判思考与反思】**\n\n- **前置假设**：作者构建了经典的二元心智架构，但当代认知计算神经学发现各脑区是大规模全息协同网络，不存在机械式的“单向切换”。\n- **适用边界**：当情境充斥高度随机性或陌生变量时，过度依赖直觉往往导致灾难性的经验偏差。`
+      : options.prompt.includes('提炼金句')
+      ? `> **核心洞见提炼**：\n> “直觉是进化馈赠的省力捷径，也是理性最易搁浅的迷雾浅滩。”`
+      : `您在《${options.context.chapterTitle || '当前章节'}》引用的文字：\n\n“${options.context.selectionQuote}”\n\n这是全书认知科学的核心基石。您可以在配置真实 API Key 后展开无限制自由追问。`
+    : `您提问的“${options.prompt}”在《${options.context.bookTitle}》的逻辑体系中占据核心地位，阐明了在复杂决策中识别自身认知局限的重要性。`;
+
+  const fullResponse = guideNotice + dynamicContent;
   const tokens = fullResponse.split(/(.{1,4})/g).filter(Boolean);
   let currentIndex = 0;
   let accumulated = '';
@@ -116,7 +207,7 @@ export function streamChatCompletion(options: StreamChatOptions): () => void {
       clearInterval(intervalId);
       options.onDone(accumulated);
     }
-  }, 25);
+  }, 20);
 
   return () => {
     isAborted = true;

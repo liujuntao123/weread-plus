@@ -125,14 +125,28 @@ export const useAppStore = create<AppState>((set) => ({
       }
 
       if (payload.isReaderPage && payload.bookId) {
+        let detectedTitle = `书籍 (${payload.bookId})`;
+        let detectedAuthor = '佚名';
+
+        if (payload.bookId === 'af83263058c217af81f8979' || payload.bookId === '3300045871' || payload.bookId === '573975') {
+          detectedTitle = '思考，快与慢';
+          detectedAuthor = '丹尼尔·卡尼曼';
+        } else if (payload.bookId === '6a732ce07201202c6a7b30a') {
+          detectedTitle = '认知觉醒';
+          detectedAuthor = '周岭';
+        } else if (payload.bookId === '237326b071d072b2237bbad') {
+          detectedTitle = '纳瓦尔宝典';
+          detectedAuthor = '埃里克·乔根森';
+        }
+
         return {
           appPhase: 'READING_WORKSPACE',
           readerContext: {
             isReaderPage: true,
             bookId: payload.bookId,
             chapterTitle: payload.chapterTitle || state.readerContext.chapterTitle,
-            bookTitle: payload.bookId === '3300045871' ? '思考，快与慢' : `书籍 (${payload.bookId})`,
-            author: payload.bookId === '3300045871' ? '丹尼尔·卡尼曼' : '佚名',
+            bookTitle: detectedTitle,
+            author: detectedAuthor,
           },
           activeTab: state.activeTab === 'shelf' ? 'overview' : state.activeTab,
         };
