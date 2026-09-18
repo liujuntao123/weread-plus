@@ -5,12 +5,18 @@ The Overview Hub tab in the Auxiliary Sidebar, allowing readers to upload, paste
 
 **Blocked by:** 03: WeRead Session Extraction and Notes Stream Sync
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Overview Hub tab displays an empty state with "Upload Markdown" and file drop zone when no overview exists.
-- [ ] Users can drag-and-drop or select a `.md` file to import.
-- [ ] FrontMatter metadata (`bookId`, `title`, `author`, `tags`) is parsed and validated against the active book.
-- [ ] Markdown headings (`#`, `##`, `###`) are transformed into a hierarchical tree of `ChapterNode` objects.
-- [ ] List items, bolded key terms, and `> [!QUOTE]` callouts are preserved and formatted as structured cards under each chapter.
-- [ ] Parsed nodes and raw Markdown are persisted to `overview_documents` and `chapter_nodes` tables in SQLite.
-- [ ] Tree view in the sidebar supports collapsing and expanding section branches.
+- [x] Overview Hub tab displays an empty state with "Upload Markdown" and file drop zone when no overview exists.
+- [x] Users can drag-and-drop or select a `.md` file to import.
+- [x] FrontMatter metadata (`bookId`, `title`, `author`, `tags`) is parsed and validated against the active book.
+- [x] Markdown headings (`#`, `##`, `###`) are transformed into a hierarchical tree of `ChapterNode` objects.
+- [x] List items, bolded key terms, and `> [!QUOTE]` callouts are preserved and formatted as structured cards under each chapter.
+- [x] Parsed nodes and raw Markdown are persisted to `overview_documents` and `chapter_nodes` tables in SQLite.
+- [x] Tree view in the sidebar supports collapsing and expanding section branches.
+
+## Implementation Details
+
+- **Markdown AST Parser**: `src/services/markdownParser.ts` parses YAML FrontMatter, extracts headings, builds `ChapterNode` hierarchy, and normalizes chapter titles for fuzzy alignment.
+- **Overview Hub UI**: `src/components/overview/OverviewHub.tsx` provides file import, preloaded demo overview, and collapsible chapter outline cards.
+- **Tests**: 4 unit tests passing in `src/services/markdownParser.test.ts`. Total 14 tests green.

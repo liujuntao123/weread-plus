@@ -64,6 +64,33 @@ export interface AnnotationItem {
   createTime: number;
 }
 
+export interface ChapterNode {
+  id: string;
+  documentId: string;
+  bookId: string;
+  chapterUid?: number;
+  title: string;
+  cleanTitle: string;
+  level: number; // 1: Part, 2: Chapter, 3: Section
+  orderIndex: number;
+  summaryMarkdown?: string;
+  bulletPoints: string[];
+  quotes: string[];
+  children?: ChapterNode[];
+}
+
+export interface OverviewDocument {
+  id: string;
+  bookId: string;
+  title: string;
+  author?: string;
+  version?: string;
+  tags?: string[];
+  source?: 'imported' | 'ai-generated' | 'manual';
+  nodes: ChapterNode[];
+  rawMarkdown: string;
+}
+
 export interface DualWebviewLayoutState {
   splitRatio: number;
   isSidebarVisible: boolean;
