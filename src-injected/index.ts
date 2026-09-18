@@ -107,7 +107,7 @@
     toolbar.appendChild(btn);
   }
 
-  // 4. 监听 DOM 树
+  // 4. 监听 DOM 树挂载工具栏
   const observer = new MutationObserver(() => {
     const toolbar = document.querySelector('.reader_toolbar_container') as HTMLElement | null;
     if (toolbar && toolbar.style.display !== 'none') {
@@ -123,6 +123,48 @@
       attributeFilter: ['style', 'class'],
     });
   }
+
+  // 5. 监听侧边栏派发的章节跳转指令
+  if (tauri?.event?.listen) {
+    tauri.event.listen('sidebar:navigate-chapter', (event: { payload: { chapterTitle: string; chapterUid?: number } }) => {
+      const { chapterTitle } = event.payload;
+      console.log('[weread-plus] Received navigation request to chapter:', chapterTitle);
+
+      const catalogItems = document.querySelectorAll('.readerCatalog_list_item_title_text');
+      for (const item of Array.from(catalogItems)) {
+        const itemText = item.textContent?.trim() || '';
+        if (itemText.includes(chapterTitle?.trim()) || chapterTitle?.trim().includes(itemText)) {
+          (item as HTMLElement).click();
+          return;
+        }
+      }
+    });
+  }
+
+  // 6. 监听阅读器滚动并防抖通知当前章节 (200ms 防抖)
+  let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastReportedChapter = '';
+
+  function handleReaderScroll() {
+    if (scrollTimer) clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      const chapterTitleEl = document.querySelector('.readerTopBar_title_chapter');
+      const currentChapterTitle = chapterTitleEl?.textContent?.trim() || '';
+
+      if (currentChapterTitle && currentChapterTitle !== lastReportedChapter) {
+        lastReportedChapter = currentChapterTitle;
+        if (tauri?.event?.emit && currentBookId) {
+          tauri.event.emit('weread:reader-scroll', {
+            bookId: currentBookId,
+            currentChapterTitle,
+            readingProgress: 0,
+          });
+        }
+      }
+    }, 200);
+  }
+
+  window.addEventListener('scroll', handleReaderScroll, { passive: true });
 
   // 初始化通知一次
   notifyRouteChange();
