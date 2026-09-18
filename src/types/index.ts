@@ -48,6 +48,22 @@ export interface UserSession {
   totalReadTime?: number; // seconds
 }
 
+export type AnnotationType = 'highlight' | 'thought' | 'best_bookmark';
+
+export interface AnnotationItem {
+  id: string;
+  bookId: string;
+  chapterUid: number;
+  chapterTitle: string;
+  type: AnnotationType;
+  rangeOffset?: string;
+  markText: string;
+  thoughtContent?: string;
+  style: number; // 0: 细线, 1: 直线高亮, 2: 波浪线
+  totalCount?: number; // 针对热门划线共读人数
+  createTime: number;
+}
+
 export interface DualWebviewLayoutState {
   splitRatio: number;
   isSidebarVisible: boolean;

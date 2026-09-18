@@ -3,6 +3,7 @@ import { BookMarked, MessageSquareText, Compass, Settings, Library } from 'lucid
 import { useAppStore } from '../../store/useAppStore';
 import { UnauthenticatedView } from '../auth/UnauthenticatedView';
 import { ShelfDashboard } from '../shelf/ShelfDashboard';
+import { NotesStream } from '../notes/NotesStream';
 import type { SidebarTab } from '../../types';
 
 export const SidebarContainer: React.FC = () => {
@@ -103,14 +104,7 @@ export const SidebarContainer: React.FC = () => {
         )}
 
         {activeTab === 'notes' && (
-          <div className="space-y-4">
-            <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200">
-              书籍笔记与划线流
-            </h3>
-            <p className="text-xs text-slate-400">
-              登录微信读书后，自动拉取当前书目的划线、想法与热门书评。
-            </p>
-          </div>
+          <NotesStream />
         )}
 
         {activeTab === 'copilot' && (

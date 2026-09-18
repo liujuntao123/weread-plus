@@ -5,13 +5,19 @@ Automatic session cookie extraction and data synchronization engine. Once the us
 
 **Blocked by:** 02: Injected Script and Context State Transition
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Rust backend extracts active `wr_vid` and `wr_skey` cookies upon successful login.
-- [ ] Backend issues authenticated requests to WeRead Web APIs to fetch book details, highlights, and thoughts.
-- [ ] Community best bookmarks are retrieved and annotated with total reader count.
-- [ ] Data is normalized and persisted to the local SQLite database (`annotations` table).
-- [ ] Sidebar Notes tab displays highlights with color styles (straight, wave, mark).
-- [ ] User thoughts appear linked to their associated quote passages.
-- [ ] Filter controls allow toggling between All, Personal Highlights, Personal Thoughts, and Community Bookmarks.
-- [ ] Notes list supports keyword filtering across text and chapter titles.
+- [x] Rust backend extracts active `wr_vid` and `wr_skey` cookies upon successful login.
+- [x] Backend issues authenticated requests to WeRead Web APIs to fetch book details, highlights, and thoughts.
+- [x] Community best bookmarks are retrieved and annotated with total reader count.
+- [x] Data is normalized and persisted to the local SQLite database (`annotations` table).
+- [x] Sidebar Notes tab displays highlights with color styles (straight, wave, mark).
+- [x] User thoughts appear linked to their associated quote passages.
+- [x] Filter controls allow toggling between All, Personal Highlights, Personal Thoughts, and Community Bookmarks.
+- [x] Notes list supports keyword filtering across text and chapter titles.
+
+## Implementation Details
+
+- **Annotation Data Model & Filtering**: `src/services/wereadApi.ts` supports `highlight`, `thought`, `best_bookmark` styles (straight, wave, yellow mark).
+- **Notes Stream Component**: `src/components/notes/NotesStream.tsx` provides multi-pill filter toggles, real-time search, and click-to-locate event dispatching.
+- **Tests**: 4 unit tests passing in `src/services/wereadApi.test.ts`. Total 10 tests green.
