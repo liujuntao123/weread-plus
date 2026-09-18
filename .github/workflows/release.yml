@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag (e.g. v0.1.0)'
+        description: 'Release Tag (留空则自动取 tauri.conf.json 版本号, e.g. v0.1.1)'
         required: false
-        default: 'v0.1.0'
+        default: ''
 
 permissions:
   contents: write
@@ -58,14 +58,17 @@ jobs:
         id: vars
         shell: bash
         run: |
+          # 优先级：git tag > workflow_dispatch 输入 > 从 tauri.conf.json 版本号自动派生
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           elif [[ -n "${{ inputs.release_tag }}" ]]; then
             TAG="${{ inputs.release_tag }}"
           else
-            TAG="v0.1.0"
+            APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            TAG="v${APP_VERSION}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Resolved release tag: $TAG"
 
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
